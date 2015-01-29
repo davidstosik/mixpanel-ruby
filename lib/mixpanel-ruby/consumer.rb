@@ -67,10 +67,12 @@ module Mixpanel
     # they will be used instead of the default Mixpanel endpoints.
     # This can be useful for proxying, debugging, or if you prefer
     # not to use SSL for your events.
-    def initialize(events_endpoint=nil, update_endpoint=nil, import_endpoint=nil)
+    def initialize(events_endpoint=nil, update_endpoint=nil, import_endpoint=nil, *options)
+      options.reverse_merge!(raise_errors: false)
       @events_endpoint = events_endpoint || 'https://api.mixpanel.com/track'
       @update_endpoint = update_endpoint || 'https://api.mixpanel.com/engage'
       @import_endpoint = import_endpoint || 'https://api.mixpanel.com/import'
+      @raise_errors    = options[:raise_errors]
     end
 
     # Send the given string message to Mixpanel. Type should be
@@ -97,7 +99,10 @@ module Mixpanel
       begin
         response_code, response_body = request(endpoint, form_data)
       rescue Exception => e
-        raise ConnectionError.new("Could not connect to Mixpanel, with error \"#{e.message}\".")
+        if @raise_errors
+          raise ConnectionError.new("Could not connect to Mixpanel, with error \"#{e.message}\".")
+        end
+        return
       end
 
       succeeded = nil
@@ -106,9 +111,11 @@ module Mixpanel
         succeeded = result['status'] == 1
       end
 
-      if ! succeeded
+      if !succeeded && @raise_errors
         raise ServerError.new("Could not write to Mixpanel, server responded with #{response_code} returning: '#{response_body}'")
       end
+      
+      result['status']
     end
 
     # Request takes an endpoint HTTP or HTTPS url, and a Hash of data
